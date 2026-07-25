@@ -205,16 +205,43 @@ func NewSearchAction(page *rod.Page) *SearchAction {
 	return &SearchAction{page: pp}
 }
 
+func loadSearchPage(ctx context.Context, page *rod.Page, searchURL string) (*rod.Page, error) {
+	const maxAttempts = 2
+	const attemptTimeout = 20 * time.Second
+
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		attemptPage := page.Timeout(attemptTimeout)
+		lastErr = rod.Try(func() {
+			if attempt > 1 {
+				attemptPage.MustNavigate("about:blank")
+			}
+			attemptPage.MustNavigate(searchURL)
+			attemptPage.MustWaitStable()
+			attemptPage.MustWait(`() => window.__INITIAL_STATE__ !== undefined`)
+		})
+		if lastErr == nil {
+			return attemptPage.CancelTimeout(), nil
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+	}
+
+	return nil, fmt.Errorf("搜索页初始化失败，已重试 %d 次: %w", maxAttempts, lastErr)
+}
+
 func (s *SearchAction) Search(ctx context.Context, keyword string, filters ...FilterOption) ([]Feed, error) {
 	// 注意 .Context(ctx) 会替换掉 NewSearchAction 里设的 60s deadline，必须在其后重新 Timeout，
 	// 否则搜索页不 stable 时 MustWaitStable/MustWait 会永久挂起（无 deadline 可依赖）。
 	page := s.page.Context(ctx).Timeout(60 * time.Second)
 
 	searchURL := makeSearchURL(keyword)
-	page.MustNavigate(searchURL)
-	page.MustWaitStable()
-
-	page.MustWait(`() => window.__INITIAL_STATE__ !== undefined`)
+	var err error
+	page, err = loadSearchPage(ctx, page, searchURL)
+	if err != nil {
+		return nil, err
+	}
 
 	// 如果有筛选条件，则应用筛选
 	if len(filters) > 0 {
