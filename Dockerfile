@@ -92,8 +92,8 @@ RUN mkdir -p /opt/browser \
 COPY browser/browser_version.txt /tmp/browser_version.txt
 RUN VER="$(cat /tmp/browser_version.txt | tr -d '[:space:]')" && \
     BASE="https://cdn.one-world.ai/browsers/${VER}" && \
-    curl -fsSL -o /tmp/browser.tar.xz "${BASE}/linux-x64.tar.xz" && \
-    curl -fsSL "${BASE}/SHA256SUMS" | grep " linux-x64.tar.xz$" | awk '{print $1"  /tmp/browser.tar.xz"}' | sha256sum -c - && \
+    curl -4 --retry 5 --retry-all-errors --connect-timeout 15 -fsSL -o /tmp/browser.tar.xz "${BASE}/linux-x64.tar.xz" && \
+    curl -4 --retry 5 --retry-all-errors --connect-timeout 15 -fsSL "${BASE}/SHA256SUMS" | grep " linux-x64.tar.xz$" | awk '{print $1"  /tmp/browser.tar.xz"}' | sha256sum -c - && \
     tar -xJf /tmp/browser.tar.xz -C /opt/browser --strip-components=1 && \
     rm /tmp/browser.tar.xz /tmp/browser_version.txt && \
     test -x /opt/browser/chrome
