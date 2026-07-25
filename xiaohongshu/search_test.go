@@ -42,3 +42,17 @@ func TestFilterValidation(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, internalFilters, 5)
 }
+
+func TestConvertToInternalFiltersSkipsDefaults(t *testing.T) {
+	defaults := FilterOption{
+		SortBy:      "综合",
+		NoteType:    "不限",
+		PublishTime: "不限",
+		SearchScope: "不限",
+		Location:    "不限",
+	}
+
+	internalFilters, err := convertToInternalFilters(defaults)
+	require.NoError(t, err)
+	require.Empty(t, internalFilters)
+}

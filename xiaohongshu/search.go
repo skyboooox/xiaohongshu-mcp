@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -72,7 +73,7 @@ func convertToInternalFilters(filter FilterOption) ([]internalFilterOption, erro
 	var internalFilters []internalFilterOption
 
 	// 处理排序依据
-	if filter.SortBy != "" {
+	if filter.SortBy != "" && filter.SortBy != "综合" {
 		internal, err := findInternalOption(1, filter.SortBy)
 		if err != nil {
 			return nil, fmt.Errorf("排序依据错误: %w", err)
@@ -81,7 +82,7 @@ func convertToInternalFilters(filter FilterOption) ([]internalFilterOption, erro
 	}
 
 	// 处理笔记类型
-	if filter.NoteType != "" {
+	if filter.NoteType != "" && filter.NoteType != "不限" {
 		internal, err := findInternalOption(2, filter.NoteType)
 		if err != nil {
 			return nil, fmt.Errorf("笔记类型错误: %w", err)
@@ -90,7 +91,7 @@ func convertToInternalFilters(filter FilterOption) ([]internalFilterOption, erro
 	}
 
 	// 处理发布时间
-	if filter.PublishTime != "" {
+	if filter.PublishTime != "" && filter.PublishTime != "不限" {
 		internal, err := findInternalOption(3, filter.PublishTime)
 		if err != nil {
 			return nil, fmt.Errorf("发布时间错误: %w", err)
@@ -99,7 +100,7 @@ func convertToInternalFilters(filter FilterOption) ([]internalFilterOption, erro
 	}
 
 	// 处理搜索范围
-	if filter.SearchScope != "" {
+	if filter.SearchScope != "" && filter.SearchScope != "不限" {
 		internal, err := findInternalOption(4, filter.SearchScope)
 		if err != nil {
 			return nil, fmt.Errorf("搜索范围错误: %w", err)
@@ -108,7 +109,7 @@ func convertToInternalFilters(filter FilterOption) ([]internalFilterOption, erro
 	}
 
 	// 处理位置距离
-	if filter.Location != "" {
+	if filter.Location != "" && filter.Location != "不限" {
 		internal, err := findInternalOption(5, filter.Location)
 		if err != nil {
 			return nil, fmt.Errorf("位置距离错误: %w", err)
@@ -156,6 +157,44 @@ func validateInternalFilterOption(filter internalFilterOption) error {
 	return nil
 }
 
+// findFilterOption locates an option by its group and visible text. Xiaohongshu's
+// filter panel contains extra wrapper elements, so CSS nth-child positions are
+// not stable across page releases.
+func findFilterOption(page *rod.Page, filter internalFilterOption) (*rod.Element, error) {
+	groups, err := page.Elements(`div.filter-panel div.filters`)
+	if err == nil && len(groups) >= filter.FiltersIndex {
+		options, optionsErr := groups[filter.FiltersIndex-1].Elements(`div.tags`)
+		if optionsErr == nil {
+			for _, option := range options {
+				text, textErr := option.Text()
+				if textErr == nil && strings.TrimSpace(text) == filter.Text {
+					return option, nil
+				}
+			}
+		}
+	}
+
+	// Fall back to the full panel for options whose text is unique. This keeps
+	// working if the site renames or removes the group wrapper class.
+	options, fallbackErr := page.Elements(`div.filter-panel div.tags`)
+	if fallbackErr == nil {
+		var match *rod.Element
+		matches := 0
+		for _, option := range options {
+			text, textErr := option.Text()
+			if textErr == nil && strings.TrimSpace(text) == filter.Text {
+				match = option
+				matches++
+			}
+		}
+		if matches == 1 {
+			return match, nil
+		}
+	}
+
+	return nil, fmt.Errorf("筛选面板中未找到选项 %q", filter.Text)
+}
+
 type SearchAction struct {
 	page *rod.Page
 }
@@ -196,30 +235,33 @@ func (s *SearchAction) Search(ctx context.Context, keyword string, filters ...Fi
 			}
 		}
 
-		// 悬停在筛选按钮上
-		filterButton := page.MustElement(`div.filter`)
-		filterButton.MustHover()
-		humanize.Delay(ctx, humanize.BeforeClick)
-
-		// 等待筛选面板出现
-		page.MustWait(`() => document.querySelector('div.filter-panel') !== null`)
-
-		// 用 ClickNoWait：筛选面板是 hover 浮层，rod 的 WaitInteractable 会误判被遮挡而死等；
-		// ClickNoWait 移进面板内选项（维持 hover、面板不关）再点。
-		for _, filter := range allInternalFilters {
-			selector := fmt.Sprintf(`div.filter-panel div.filters:nth-child(%d) div.tags:nth-child(%d)`,
-				filter.FiltersIndex, filter.TagsIndex)
-			option := page.MustElement(selector)
+		if len(allInternalFilters) > 0 {
+			// 悬停在筛选按钮上
+			filterButton := page.MustElement(`div.filter`)
+			filterButton.MustHover()
 			humanize.Delay(ctx, humanize.BeforeClick)
-			if err := humanize.ClickNoWait(option); err != nil {
-				return nil, fmt.Errorf("点击筛选选项失败: %w", err)
-			}
-		}
 
-		// 等待页面更新
-		page.MustWaitStable()
-		// 重新等待 __INITIAL_STATE__ 更新
-		page.MustWait(`() => window.__INITIAL_STATE__ !== undefined`)
+			// 等待筛选面板出现
+			page.MustWait(`() => document.querySelector('div.filter-panel') !== null`)
+
+			// 用 ClickNoWait：筛选面板是 hover 浮层，rod 的 WaitInteractable 会误判被遮挡而死等；
+			// ClickNoWait 移进面板内选项（维持 hover、面板不关）再点。
+			for _, filter := range allInternalFilters {
+				option, err := findFilterOption(page, filter)
+				if err != nil {
+					return nil, err
+				}
+				humanize.Delay(ctx, humanize.BeforeClick)
+				if err := humanize.ClickNoWait(option); err != nil {
+					return nil, fmt.Errorf("点击筛选选项失败: %w", err)
+				}
+			}
+
+			// 等待页面更新
+			page.MustWaitStable()
+			// 重新等待 __INITIAL_STATE__ 更新
+			page.MustWait(`() => window.__INITIAL_STATE__ !== undefined`)
+		}
 	}
 
 	result := page.MustEval(`() => {
