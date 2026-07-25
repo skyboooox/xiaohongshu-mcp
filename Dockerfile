@@ -1,7 +1,8 @@
-# syntax=docker/dockerfile:1.6
-
 # ---- build stage ----
-FROM golang:1.24 AS builder
+ARG GO_IMAGE=golang:1.24
+ARG RUNTIME_IMAGE=ubuntu:22.04
+
+FROM ${GO_IMAGE} AS builder
 
 WORKDIR /src
 # 配置 Go 模块代理为国内源
@@ -15,7 +16,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /out/app .
 
 # ---- run stage ----
-FROM ubuntu:22.04
+FROM ${RUNTIME_IMAGE}
 
 # 设置时区
 ENV TZ=Asia/Shanghai
