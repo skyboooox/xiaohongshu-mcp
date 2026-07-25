@@ -1,0 +1,20 @@
+ARG GO_IMAGE=golang:1.24
+ARG BASE_IMAGE=xpzouying/xiaohongshu-mcp:latest
+
+FROM ${GO_IMAGE} AS builder
+
+WORKDIR /src
+ENV GOPROXY=https://goproxy.cn,direct
+ENV GOSUMDB=sum.golang.google.cn
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /out/app .
+
+# Reuse the upstream runtime, browser, and fonts. Only replace the MCP binary
+# with the authenticated build from this fork.
+FROM ${BASE_IMAGE}
+COPY --from=builder /out/app /app/app
+
