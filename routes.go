@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -22,6 +23,7 @@ func setupRoutes(appServer *AppServer) *gin.Engine {
 
 	// 健康检查
 	router.GET("/health", healthHandler)
+	authMiddleware := bearerTokenAuthMiddleware(os.Getenv("MCP_AUTH_TOKEN"))
 
 	// MCP 端点 - 使用官方 SDK 的 Streamable HTTP Handler
 	mcpHandler := mcp.NewStreamableHTTPHandler(
@@ -32,11 +34,11 @@ func setupRoutes(appServer *AppServer) *gin.Engine {
 			JSONResponse: true, // 支持 JSON 响应
 		},
 	)
-	router.Any("/mcp", gin.WrapH(mcpHandler))
-	router.Any("/mcp/*path", gin.WrapH(mcpHandler))
+	router.Any("/mcp", authMiddleware, gin.WrapH(mcpHandler))
+	router.Any("/mcp/*path", authMiddleware, gin.WrapH(mcpHandler))
 
 	// API 路由组
-	api := router.Group("/api/v1")
+	api := router.Group("/api/v1", authMiddleware)
 	{
 		api.GET("/login/status", appServer.checkLoginStatusHandler)
 		api.GET("/login/qrcode", appServer.getLoginQrcodeHandler)

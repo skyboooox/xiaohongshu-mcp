@@ -1,5 +1,11 @@
 # xiaohongshu-mcp
 
+> This fork requires Bearer token authentication for `/mcp`, `/mcp/*`, and
+> `/api/v1/*`. Set `MCP_AUTH_TOKEN` before starting the server and send it as
+> `Authorization: Bearer <token>`. `/health` remains unauthenticated. If the
+> environment variable is missing, protected endpoints fail closed with HTTP
+> 503.
+
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
 [![All Contributors](https://img.shields.io/badge/all_contributors-27-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->

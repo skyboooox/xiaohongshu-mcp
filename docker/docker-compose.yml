@@ -1,9 +1,10 @@
 services:
   xiaohongshu-mcp:
-    # Docker Hub 镜像（默认）
-    image: xpzouying/xiaohongshu-mcp
-    # 阿里云镜像源（国内用户推荐，拉取更快）
-    # image: crpi-hocnvtkomt7w9v8t.cn-beijing.personal.cr.aliyuncs.com/xpzouying/xiaohongshu-mcp
+    # Build this fork so Bearer-token authentication is included.
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: skyboooox/xiaohongshu-mcp:token-auth
     container_name: xiaohongshu-mcp
     restart: unless-stopped
     init: true
@@ -12,6 +13,9 @@ services:
       - ./data:/app/data
       - ./images:/app/images
     environment:
+      # Required by this fork. Requests to /mcp and /api/v1 must send
+      # Authorization: Bearer <token>.
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:?set MCP_AUTH_TOKEN in .env}
       - ROD_BROWSER_BIN=/opt/browser/chrome
       - COOKIES_PATH=/app/data/cookies.json
       - HOME=/app/data/home
